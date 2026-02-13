@@ -32,7 +32,12 @@ pids
 # =========================
 # Video Processing Files
 # =========================
-uploads/
+server/uploads/*
+!server/uploads/.gitkeep
+
+server/results/*
+!server/results/.gitkeep
+
 processed/
 temp/
 tmp/
