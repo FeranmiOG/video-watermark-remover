@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoWatermarkRemover - 专业视频去水印工具</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部区域 -->
+        <header class="header">
+            <div class="logo-container">
+                <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/c11b1975d5744f4e91d1b4180932fb83~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=202602130242271D92D76E76B7A13DFF38&rrcfp=f06b921b&x-expires=1773513759&x-signature=esmbJ1AtgeLpovvkEFKvMJ0Ph%2FE%3D" alt="VideoWatermarkRemover Logo" class="logo">
+                <h1 class="app-title">VideoWatermarkRemover</h1>
+            </div>
+            <p class="app-description">专业视频去水印工具，简单高效，保留原始画质</p>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <main class="main-content">
+            <!-- 左侧上传与操作区 -->
+            <section class="upload-section">
+                <div class="upload-container">
+                    <div id="dropZone" class="drop-zone">
+                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                        <p class="upload-text">拖拽视频文件到此处或</p>
+                        <label class="upload-btn">
+                            选择文件
+                            <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska" hidden>
+                        </label>
+                        <p class="file-info">支持 MP4、MOV、AVI、MKV 格式，最大 100MB</p>
+                    </div>
+                    
+                    <div id="uploadProgressContainer" class="progress-container hidden">
+                        <div class="progress-bar">
+                            <div id="uploadProgress" class="progress-fill"></div>
+                        </div>
+                        <span id="uploadProgressText" class="progress-text">0%</span>
+                    </div>
+                    
+                    <div id="fileInfoContainer" class="file-info-container hidden">
+                        <div class="file-details">
+                            <i class="fas fa-file-video file-icon"></i>
+                            <div>
+                                <p id="fileName" class="file-name">video.mp4</p>
+                                <p id="fileSize" class="file-size">10.5 MB</p>
+                            </div>
+                            <button id="removeFileBtn" class="remove-btn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="watermarkSelection" class="watermark-selection hidden">
+                    <h3 class="section-title">标记水印区域</h3>
+                    <p class="section-description">在视频预览中拖动鼠标框选水印位置</p>
+                    <div class="selection-controls">
+                        <button id="autoDetectBtn" class="control-btn primary">
+                            <i class="fas fa-magic"></i> AI智能检测
+                        </button>
+                        <button id="clearSelectionBtn" class="control-btn secondary">
+                            <i class="fas fa-eraser"></i> 清除选择
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="processingControls" class="processing-controls hidden">
+                    <button id="processBtn" class="process-btn">
+                        <i class="fas fa-cog"></i> 开始去水印
+                    </button>
+                </div>
+                
+                <div id="processingStatus" class="processing-status hidden">
+                    <div class="status-container">
+                        <div class="spinner"></div>
+                        <p id="statusText" class="status-text">正在处理视频...</p>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div id="processingProgress" class="progress-fill"></div>
+                        </div>
+                        <span id="processingProgressText" class="progress-text">0%</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右侧预览与结果区 -->
+            <section class="preview-section">
+                <div id="originalPreview" class="preview-container">
+                    <h3 class="section-title">原始视频</h3>
+                    <div class="video-placeholder">
+                        <i class="fas fa-film placeholder-icon"></i>
+                        <p class="placeholder-text">上传视频后在此处预览</p>
+                    </div>
+                    <video id="originalVideo" class="video-preview hidden" controls></video>
+                </div>
+                
+                <div id="resultPreview" class="preview-container hidden">
+                    <h3 class="section-title">处理结果</h3>
+                    <div class="video-placeholder">
+                        <i class="fas fa-spinner fa-spin placeholder-icon"></i>
+                        <p class="placeholder-text">处理完成后在此处预览</p>
+                    </div>
+                    <video id="resultVideo" class="video-preview hidden" controls></video>
+                    
+                    <div class="download-container hidden">
+                        <a id="downloadBtn" href="#" class="download-btn">
+                            <i class="fas fa-download"></i> 下载无水印视频
+                        </a>
+                        <button id="fullscreenBtn" class="fullscreen-btn">
+                            <i class="fas fa-expand"></i> 全屏预览
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部辅助功能区 -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4 class="footer-title">支持的视频格式</h4>
+                    <ul class="format-list">
+                        <li><i class="fas fa-file-video"></i> MP4</li>
+                        <li><i class="fas fa-file-video"></i> MOV</li>
+                        <li><i class="fas fa-file-video"></i> AVI</li>
+                        <li><i class="fas fa-file-video"></i> MKV</li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h4 class="footer-title">操作指南</h4>
+                    <ol class="guide-list">
+                        <li>上传需要处理的视频文件</li>
+                        <li>在预览中框选水印区域或使用AI智能检测</li>
+                        <li>点击"开始去水印"按钮</li>
+                        <li>等待处理完成后预览并下载结果</li>
+                    </ol>
+                </div>
+                
+                <div class="footer-section">
+                    <h4 class="footer-title">常见问题</h4>
+                    <div class="faq-item">
+                        <h5 class="faq-question">处理后的视频质量如何？</h5>
+                        <p class="faq-answer">我们采用先进的算法，确保处理后的视频保持原始画质，无模糊、无卡顿。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h5 class="faq-question">最大支持多大的视频文件？</h5>
+                        <p class="faq-answer">目前最大支持100MB的视频文件，超过大小限制的文件将无法上传。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h5 class="faq-question">处理需要多长时间？</h5>
+                        <p class="faq-answer">处理时间取决于视频长度和大小，通常在1-3分钟内完成。</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="copyright">
+                <p>&copy; 2023 VideoWatermarkRemover. 保留所有权利。</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 全屏预览模态框 -->
+    <div id="fullscreenModal" class="modal hidden">
+        <div class="modal-content">
+            <button id="closeModalBtn" class="close-btn">
+                <i class="fas fa-times"></i>
+            </button>
+            <video id="fullscreenVideo" class="fullscreen-video" controls></video>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
