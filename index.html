@@ -30,16 +30,16 @@
                             选择文件
                             <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska" hidden>
                         </label>
-                        <p class="file-info">支持 MP4、MOV、AVI、MKV 格式，最大 100MB</p>
+                        <p class="file-info">支持 MP4、MOV、AVI、MKV 格式，最大 1GB</p>
                     </div>
-                    
+
                     <div id="uploadProgressContainer" class="progress-container hidden">
                         <div class="progress-bar">
                             <div id="uploadProgress" class="progress-fill"></div>
                         </div>
                         <span id="uploadProgressText" class="progress-text">0%</span>
                     </div>
-                    
+
                     <div id="fileInfoContainer" class="file-info-container hidden">
                         <div class="file-details">
                             <i class="fas fa-file-video file-icon"></i>
@@ -53,7 +53,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div id="watermarkSelection" class="watermark-selection hidden">
                     <h3 class="section-title">标记水印区域</h3>
                     <p class="section-description">在视频预览中拖动鼠标框选水印位置</p>
@@ -66,13 +66,13 @@
                         </button>
                     </div>
                 </div>
-                
+
                 <div id="processingControls" class="processing-controls hidden">
                     <button id="processBtn" class="process-btn">
                         <i class="fas fa-cog"></i> 开始去水印
                     </button>
                 </div>
-                
+
                 <div id="processingStatus" class="processing-status hidden">
                     <div class="status-container">
                         <div class="spinner"></div>
@@ -97,7 +97,7 @@
                     </div>
                     <video id="originalVideo" class="video-preview hidden" controls></video>
                 </div>
-                
+
                 <div id="resultPreview" class="preview-container hidden">
                     <h3 class="section-title">处理结果</h3>
                     <div class="video-placeholder">
@@ -105,7 +105,7 @@
                         <p class="placeholder-text">处理完成后在此处预览</p>
                     </div>
                     <video id="resultVideo" class="video-preview hidden" controls></video>
-                    
+
                     <div class="download-container hidden">
                         <a id="downloadBtn" href="#" class="download-btn">
                             <i class="fas fa-download"></i> 下载无水印视频
@@ -130,7 +130,7 @@
                         <li><i class="fas fa-file-video"></i> MKV</li>
                     </ul>
                 </div>
-                
+
                 <div class="footer-section">
                     <h4 class="footer-title">操作指南</h4>
                     <ol class="guide-list">
@@ -140,7 +140,7 @@
                         <li>等待处理完成后预览并下载结果</li>
                     </ol>
                 </div>
-                
+
                 <div class="footer-section">
                     <h4 class="footer-title">常见问题</h4>
                     <div class="faq-item">
@@ -149,7 +149,7 @@
                     </div>
                     <div class="faq-item">
                         <h5 class="faq-question">最大支持多大的视频文件？</h5>
-                        <p class="faq-answer">目前最大支持100MB的视频文件，超过大小限制的文件将无法上传。</p>
+                        <p class="faq-answer">目前最大支持1GB的视频文件，超过大小限制 的文件将无法上传。</p>
                     </div>
                     <div class="faq-item">
                         <h5 class="faq-question">处理需要多长时间？</h5>
@@ -157,7 +157,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="copyright">
                 <p>&copy; 2023 VideoWatermarkRemover. 保留所有权利。</p>
             </div>
@@ -174,6 +174,8 @@
         </div>
     </div>
 
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
     <script src="script.js"></script>
 </body>
 </html>

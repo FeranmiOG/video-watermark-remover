@@ -9,62 +9,95 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 启用CORS
+// Enable CORS
 app.use(cors());
 
-// 设置静态文件目录
-app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
-app.use('/results', express.static('results'));
+// Deployment JSON parser
+app.use(express.json({ limit: '2048mb' }));
 
-// 确保上传和结果目录存在
+// Static paths
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/results', express.static(path.join(__dirname, 'results')));
+
+// Ensure directories exist
 const uploadsDir = path.join(__dirname, 'uploads');
 const resultsDir = path.join(__dirname, 'results');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+/* ===========================
+   STEP 2A — QUEUE VARIABLES
+=========================== */
+const jobQueue = [];
+let isProcessing = false;
 
-if (!fs.existsSync(resultsDir)) {
-  fs.mkdirSync(resultsDir, { recursive: true });
-}
+/* ===========================
+   STEP 5 — PROGRESS TRACKING
+=========================== */
+const jobsProgress = {}; // key: jobId -> { status, percent }
 
-// 配置Multer存储
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueId = uuidv4();
-    const ext = path.extname(file.originalname);
-    cb(null, `${uniqueId}${ext}`);
+/* ===========================
+   STEP 2B/3 — QUEUE WORKER WITH TIMEOUT & PROGRESS
+=========================== */
+const JOB_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per job
+
+async function processNextJob() {
+  if (isProcessing || jobQueue.length === 0) return;
+
+  isProcessing = true;
+  const job = jobQueue.shift();
+
+  jobsProgress[job.jobId] = { status: 'processing', percent: 0 };
+
+  const timeout = new Promise((_, reject) => {
+    job._timeoutId = setTimeout(function () {
+      reject(new Error('视频处理超时'));
+    }, JOB_TIMEOUT_MS);
+  });
+
+  try {
+    await Promise.race([
+      processVideoWithFFmpegWithProgress(job.inputPath, job.outputPath, job.watermarkArea, job.jobId),
+      timeout
+    ]);
+    clearTimeout(job._timeoutId);
+    jobsProgress[job.jobId].status = 'done';
+    jobsProgress[job.jobId].percent = 100;
+    job.resolve();
+  } catch (err) {
+    clearTimeout(job._timeoutId);
+    jobsProgress[job.jobId].status = 'error';
+    job.reject(err);
+  } finally {
+    isProcessing = false;
+    processNextJob();
   }
+}
+
+/* ===========================
+   MULTER CONFIGURATION
+=========================== */
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, uploadsDir); },
+  filename: function (req, file, cb) { cb(null, `${uuidv4()}${path.extname(file.originalname)}`); }
 });
 
-// 创建Multer实例
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB 限制
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /mp4|mov|avi|mkv/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('不支持的文件格式。请上传 MP4、MOV、AVI 或 MKV 格式的视频。'));
-    }
+  limits: { fileSize: 1024 * 1024 * 1024 },
+  fileFilter: function (req, file, cb) {
+    const allowedExt = ['.mp4', '.mov', '.avi', '.mkv'];
+    if (allowedExt.includes(path.extname(file.originalname).toLowerCase())) cb(null, true);
+    else cb(new Error('不支持的文件格式'));
   }
 });
 
-// 上传视频文件
-app.post('/api/upload', upload.single('video'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, message: '没有文件被上传。' });
-  }
+/* ===========================
+   UPLOAD ROUTE
+=========================== */
+app.post('/api/upload', upload.single('video'), function (req, res) {
+  if (!req.file) return res.status(400).json({ success: false, message: '没有文件被上传' });
 
   const fileInfo = {
     originalName: req.file.originalname,
@@ -74,128 +107,139 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
     url: `/uploads/${req.file.filename}`
   };
 
-  res.json({
-    success: true,
-    message: '文件上传成功',
-    file: fileInfo
-  });
+  res.json({ success: true, message: '文件上传成功', file: fileInfo });
 });
 
-// 处理视频去水印
-app.post('/api/process', async (req, res) => {
+/* ===========================
+   PROCESS VIDEO ROUTE
+=========================== */
+app.post('/api/process', async function (req, res) {
   try {
     const { fileName, watermarkArea } = req.body;
-    
-    if (!fileName || !watermarkArea) {
-      return res.status(400).json({ success: false, message: '缺少必要参数。' });
-    }
+    if (!fileName || !watermarkArea) return res.status(400).json({ success: false, message: '缺少必要参数' });
 
     const inputPath = path.join(uploadsDir, fileName);
     const outputFileName = `processed_${uuidv4()}${path.extname(fileName)}`;
     const outputPath = path.join(resultsDir, outputFileName);
 
-    // 确保文件存在
-    if (!fs.existsSync(inputPath)) {
-      return res.status(404).json({ success: false, message: '找不到上传的文件。' });
-    }
+    if (!fs.existsSync(inputPath)) return res.status(404).json({ success: false, message: '找不到上传的文件' });
 
-    // 使用ffmpeg处理视频（模糊水印区域）
-    await processVideoWithFFmpeg(inputPath, outputPath, watermarkArea);
+    const jobId = uuidv4();
 
-    // 返回处理后的视频信息
-    res.json({
-      success: true,
-      message: '视频处理成功',
-      result: {
-        fileName: outputFileName,
-        url: `/results/${outputFileName}`
-      }
+    await new Promise(function (resolve, reject) {
+      jobQueue.push({ inputPath, outputPath, watermarkArea, jobId, resolve, reject });
+      processNextJob();
     });
+
+    res.json({ success: true, message: '视频处理已排队', jobId, result: { fileName: outputFileName, url: `/results/${outputFileName}` } });
+
   } catch (error) {
     console.error('处理视频时出错:', error);
     res.status(500).json({ success: false, message: '处理视频时出错。', error: error.message });
   }
 });
 
-// 使用ffmpeg处理视频
-function processVideoWithFFmpeg(inputPath, outputPath, watermarkArea) {
-  return new Promise((resolve, reject) => {
-    // 提取水印区域参数
-    const { x, y, width, height } = watermarkArea;
-    
-    // 构建ffmpeg命令
-    // 1. 使用boxblur滤镜模糊水印区域
-    // 2. 保持原始视频质量
-    ffmpeg(inputPath)
-      .videoFilters([
-        {
-          filter: 'boxblur',
-          options: {
-            width: 20,
-            height: 20,
-            steps: 5
-          },
-          inputs: '[0:v]',
-          outputs: '[blurred]'
-        },
-        {
-          filter: 'overlay',
-          options: {
-            x: x,
-            y: y
-          },
-          inputs: ['[0:v]', '[blurred]'],
-          outputs: '[output]'
-        }
-      ])
-      .outputOptions([
-        '-map [output]',
-        '-map 0:a?', // 保留原始音频（如果有）
-        '-c:v libx264',
-        '-crf 18', // 高质量视频
-        '-preset slow',
-        '-c:a copy' // 复制原始音频
-      ])
-      .output(outputPath)
-      .on('end', () => {
-        console.log('视频处理完成');
-        resolve();
-      })
-      .on('error', (err) => {
-        console.error('ffmpeg错误:', err);
-        reject(err);
-      })
-      .run();
+/* ===========================
+   STEP 3 — FFmpeg WITH PROGRESS
+=========================== */
+function processVideoWithFFmpegWithProgress(inputPath, outputPath, watermarkArea, jobId) {
+  return new Promise(function (resolve, reject) {
+    const { x, y, width = 200, height = 200 } = watermarkArea;
+
+    ffmpeg.ffprobe(inputPath, function (err, metadata) {
+      if (err) return reject(err);
+
+      const videoStream = metadata.streams.find(function (s) { return s.codec_type === 'video'; });
+      if (!videoStream) return reject(new Error('无法读取视频流'));
+
+      const videoWidth = videoStream.width;
+      const videoHeight = videoStream.height;
+
+      const safeX = Math.max(0, Math.min(x, videoWidth - width));
+      const safeY = Math.max(0, Math.min(y, videoHeight - height));
+      const safeWidth = Math.min(width, videoWidth - safeX);
+      const safeHeight = Math.min(height, videoHeight - safeY);
+
+      ffmpeg(inputPath)
+        .complexFilter([
+          `[0:v]split=2[main][tmp];` +
+          `[tmp]crop=${safeWidth}:${safeHeight}:${safeX}:${safeY},boxblur=20:5[blur];` +
+          `[main][blur]overlay=${safeX}:${safeY}[output]`
+        ])
+        .outputOptions([
+          '-map [output]',
+          '-map 0:a?',
+          '-c:v libx264',
+          '-crf 18',
+          '-preset slow',
+          '-c:a copy'
+        ])
+        .output(outputPath)
+        .on('progress', function (progress) {
+          if (jobsProgress[jobId]) jobsProgress[jobId].percent = Math.floor(progress.percent || 0);
+        })
+        .on('end', function () { resolve(); })
+        .on('error', function (err) { reject(err); })
+        .run();
+    });
   });
 }
 
-// 删除临时文件
-app.delete('/api/cleanup', (req, res) => {
+/* ===========================
+   STEP 5 — PROGRESS ENDPOINT
+=========================== */
+app.get('/api/progress/:jobId', function (req, res) {
+  const jobId = req.params.jobId;
+  if (!jobsProgress[jobId]) return res.status(404).json({ success: false, message: '找不到该任务' });
+  res.json({ success: true, jobId, ...jobsProgress[jobId] });
+});
+
+/* ===========================
+   STEP 4 — AUTOMATIC DISK CLEANUP
+=========================== */
+const CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // every 10 min
+const MAX_FILE_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+function cleanupOldFiles() {
+  const now = Date.now();
+
+  [uploadsDir, resultsDir].forEach(function (dir) {
+    fs.readdir(dir, function (err, files) {
+      if (err) return console.error('扫描目录出错:', dir, err);
+
+      files.forEach(function (file) {
+        const filePath = path.join(dir, file);
+
+        fs.stat(filePath, function (err, stats) {
+          if (err) return console.error('读取文件信息失败:', filePath, err);
+
+          if (now - stats.mtimeMs > MAX_FILE_AGE_MS) {
+            fs.unlink(filePath, function (err) {
+              if (!err) console.log('删除旧文件:', filePath);
+            });
+          }
+        });
+      });
+    });
+  });
+}
+
+setInterval(cleanupOldFiles, CLEANUP_INTERVAL_MS);
+cleanupOldFiles(); // initial cleanup
+
+// Manual cleanup route
+app.delete('/api/cleanup', function (req, res) {
   try {
     const { uploadFile, resultFile } = req.body;
-    
-    if (uploadFile) {
-      const uploadFilePath = path.join(uploadsDir, uploadFile);
-      if (fs.existsSync(uploadFilePath)) {
-        fs.unlinkSync(uploadFilePath);
-      }
-    }
-    
-    if (resultFile) {
-      const resultFilePath = path.join(resultsDir, resultFile);
-      if (fs.existsSync(resultFilePath)) {
-        fs.unlinkSync(resultFilePath);
-      }
-    }
-    
+    if (uploadFile && fs.existsSync(path.join(uploadsDir, uploadFile))) fs.unlinkSync(path.join(uploadsDir, uploadFile));
+    if (resultFile && fs.existsSync(path.join(resultsDir, resultFile))) fs.unlinkSync(path.join(resultsDir, resultFile));
     res.json({ success: true, message: '临时文件已清理' });
   } catch (error) {
-    console.error('清理文件时出错:', error);
-    res.status(500).json({ success: false, message: '清理文件时出错。' });
+    res.status(500).json({ success: false, message: '清理文件时出错' });
   }
 });
 
-// 启动服务器
-app.listen(PORT, () => {
+// Start server
+app.listen(PORT, function () {
   console.log(`服务器运行在 http://localhost:${PORT}`);
 });
